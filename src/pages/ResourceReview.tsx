@@ -4,19 +4,40 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-
-const pendingReviews = [
-  { id: 1, title: "人工智能导论", submitter: "张三", submittedDate: "2024-01-20", type: "新书推荐" },
-  { id: 2, title: "数据结构与算法", submitter: "李四", submittedDate: "2024-01-19", type: "采购需求" },
-  { id: 3, title: "计算机网络", submitter: "王五", submittedDate: "2024-01-18", type: "新书推荐" },
-];
-
-const reviewedItems = [
-  { id: 1, title: "深度学习实战", reviewer: "管理员", reviewDate: "2024-01-15", status: "已通过" },
-  { id: 2, title: "机器学习算法", reviewer: "管理员", reviewDate: "2024-01-14", status: "已拒绝" },
-];
+import { useEffect, useState } from "react";
+import { getPurchaseRequests } from "@/lib/localdb";
+import { useSearchParams } from "react-router-dom";
+import { BottomNav } from "@/components/BottomNav";
 
 const ResourceReview = () => {
+  const [pendingReviews, setPendingReviews] = useState<Array<{ id: number; title: string; submitter: string; submittedDate: string; type: string }>>([]);
+  const [reviewedItems, setReviewedItems] = useState<Array<{ id: number; title: string; reviewer: string; reviewDate: string; status: string }>>([]);
+  const [params] = useSearchParams();
+  const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
+
+  const refresh = () => {
+    const reqs = getPurchaseRequests();
+    const pending = reqs.filter(r => r.status === "审核中").map(r => ({
+      id: r.id,
+      title: r.title,
+      submitter: "用户",
+      submittedDate: r.submittedDate,
+      type: "采购需求",
+    }));
+    const reviewed = reqs.filter(r => r.status !== "审核中").map(r => ({
+      id: r.id,
+      title: r.title,
+      reviewer: "管理员",
+      reviewDate: r.submittedDate,
+      status: r.status === "已批准" ? "已通过" : "已拒绝",
+    }));
+    setPendingReviews(pending);
+    setReviewedItems(reviewed);
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
   const handleApprove = (title: string) => {
     toast({
       title: "审核通过",
@@ -33,9 +54,9 @@ const ResourceReview = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <header className="bg-card border-b border-border p-4">
-        <h1 className="text-2xl font-bold text-foreground">资源审核</h1>
+        <h1 className="text-2xl font-bold text-foreground">资源审核（{role === "teacher" ? "教师" : role === "student" ? "学员" : "管理员"}）</h1>
       </header>
 
       <div className="p-4">
@@ -127,6 +148,7 @@ const ResourceReview = () => {
           </TabsContent>
         </Tabs>
       </div>
+      <BottomNav />
     </div>
   );
 };

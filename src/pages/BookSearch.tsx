@@ -1,26 +1,44 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Search, Filter, Book, Star } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-const mockBooks = [
-  { id: 1, title: "深度学习", author: "Ian Goodfellow", category: "计算机科学", status: "可借", rating: 4.8, location: "A区-301" },
-  { id: 2, title: "人工智能简史", author: "尼克", category: "科技", status: "已借出", rating: 4.5, location: "A区-205" },
-  { id: 3, title: "算法导论", author: "Thomas H. Cormen", category: "计算机科学", status: "可借", rating: 4.9, location: "A区-310" },
-  { id: 4, title: "机器学习实战", author: "Peter Harrington", category: "计算机科学", status: "可借", rating: 4.6, location: "A区-308" },
-];
+import { searchBooks, borrowBook, Book as BookType } from "@/lib/localdb";
+import { toast } from "@/hooks/use-toast";
+import { useSearchParams } from "react-router-dom";
+import { BottomNav } from "@/components/BottomNav";
 
 const BookSearch = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [category, setCategory] = useState("all");
+  const [books, setBooks] = useState<BookType[]>([]);
+  const [params] = useSearchParams();
+  const role = useMemo(() => {
+    const r = params.get("role");
+    if (r === "admin" || r === "teacher" || r === "student") return r;
+    return "student";
+  }, [params]);
+
+  useEffect(() => {
+    setBooks(searchBooks(searchTerm, category));
+  }, [searchTerm, category]);
+
+  const handleBorrow = (id: number, title: string) => {
+    const ok = borrowBook(id);
+    if (ok) {
+      toast({ title: "借阅成功", description: `《${title}》已加入我的借阅` });
+      setBooks(searchBooks(searchTerm, category));
+    } else {
+      toast({ title: "无法借阅", description: "当前状态不可借阅", variant: "destructive" });
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <header className="bg-card border-b border-border p-4">
-        <h1 className="text-2xl font-bold text-foreground">在线检索</h1>
+        <h1 className="text-2xl font-bold text-foreground">在线检索（{role === "teacher" ? "教师" : role === "student" ? "学员" : "管理员"}）</h1>
       </header>
 
       <div className="p-4 space-y-4">
@@ -40,9 +58,9 @@ const BookSearch = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部分类</SelectItem>
-              <SelectItem value="cs">计算机科学</SelectItem>
-              <SelectItem value="tech">科技</SelectItem>
-              <SelectItem value="literature">文学</SelectItem>
+              <SelectItem value="计算机科学">计算机科学</SelectItem>
+              <SelectItem value="科技">科技</SelectItem>
+              <SelectItem value="文学">文学</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="icon">
@@ -51,7 +69,7 @@ const BookSearch = () => {
         </div>
 
         <div className="space-y-3">
-          {mockBooks.map((book) => (
+          {books.map((book) => (
             <Card key={book.id} className="p-4">
               <div className="flex gap-4">
                 <div className="w-16 h-20 bg-primary/10 rounded flex items-center justify-center">
@@ -72,14 +90,16 @@ const BookSearch = () => {
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">位置: {book.location}</p>
                 </div>
-                <Button size="sm" disabled={book.status !== "可借"}>借阅</Button>
+                <Button size="sm" disabled={book.status !== "可借"} onClick={() => handleBorrow(book.id, book.title)}>借阅</Button>
               </div>
             </Card>
           ))}
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 };
 
 export default BookSearch;
+ 

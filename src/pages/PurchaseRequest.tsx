@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Send, FileText } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-
-const mockRequests = [
-  { id: 1, title: "机器学习实战（第二版）", submittedDate: "2024-01-20", status: "审核中" },
-  { id: 2, title: "深入理解计算机系统", submittedDate: "2024-01-15", status: "已批准" },
-  { id: 3, title: "设计模式", submittedDate: "2024-01-10", status: "已采购" },
-];
+import { getPurchaseRequests, submitPurchaseRequest, PurchaseRequest as PR } from "@/lib/localdb";
+import { useSearchParams } from "react-router-dom";
+import { BottomNav } from "@/components/BottomNav";
 
 const PurchaseRequest = () => {
   const [formData, setFormData] = useState({
@@ -21,20 +18,27 @@ const PurchaseRequest = () => {
     isbn: "",
     reason: "",
   });
+  const [requests, setRequests] = useState<PR[]>([]);
+  const [params] = useSearchParams();
+  const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
+
+  const refresh = () => setRequests(getPurchaseRequests());
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "提交成功",
-      description: "您的采购需求已提交，我们会尽快处理",
-    });
+    submitPurchaseRequest(formData);
+    toast({ title: "提交成功", description: "您的采购需求已提交，我们会尽快处理" });
+    refresh();
     setFormData({ bookTitle: "", author: "", isbn: "", reason: "" });
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <header className="bg-card border-b border-border p-4">
-        <h1 className="text-2xl font-bold text-foreground">采购需求提交</h1>
+        <h1 className="text-2xl font-bold text-foreground">采购需求提交（{role === "teacher" ? "教师" : role === "student" ? "学员" : "管理员"}）</h1>
       </header>
 
       <div className="p-4 space-y-4">
@@ -93,7 +97,7 @@ const PurchaseRequest = () => {
         <div>
           <h3 className="font-semibold text-foreground mb-3">我的采购需求</h3>
           <div className="space-y-3">
-            {mockRequests.map((request) => (
+            {requests.map((request) => (
               <Card key={request.id} className="p-4">
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center flex-shrink-0">
@@ -121,6 +125,7 @@ const PurchaseRequest = () => {
           </div>
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 };

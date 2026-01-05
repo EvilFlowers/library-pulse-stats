@@ -14,6 +14,7 @@ import AutoInventory from "./pages/AutoInventory";
 import ResourceReview from "./pages/ResourceReview";
 import Statistics from "./pages/Statistics";
 import NotFound from "./pages/NotFound";
+import RemoteManagement from "./pages/RemoteManagement";
 
 const queryClient = new QueryClient();
 
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/inventory" element={<AutoInventory />} />
           <Route path="/review" element={<ResourceReview />} />
           <Route path="/statistics" element={<Statistics />} />
+          <Route path="/remote" element={<RemoteManagement />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

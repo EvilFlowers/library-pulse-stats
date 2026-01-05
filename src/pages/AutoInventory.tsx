@@ -3,22 +3,21 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-
-const inventoryTasks = [
-  { id: 1, area: "A区-3楼", total: 1500, completed: 1500, missing: 0, status: "已完成" },
-  { id: 2, area: "A区-2楼", total: 1800, completed: 1650, missing: 3, status: "进行中" },
-  { id: 3, area: "B区-1楼", total: 2000, completed: 0, missing: 0, status: "待开始" },
-];
-
-const missingBooks = [
-  { id: 1, title: "深度学习", location: "A区-301", lastSeen: "2024-01-10" },
-  { id: 2, title: "算法导论", location: "A区-205", lastSeen: "2024-01-08" },
-  { id: 3, title: "机器学习实战", location: "A区-308", lastSeen: "2024-01-12" },
-];
+import { useEffect, useState } from "react";
+import { getInventoryTasks, getMissingBooks, InventoryTask, MissingBook } from "@/lib/localdb";
+import { BottomNav } from "@/components/BottomNav";
 
 const AutoInventory = () => {
+  const [tasks, setTasks] = useState<InventoryTask[]>([]);
+  const [abnormal, setAbnormal] = useState<MissingBook[]>([]);
+
+  useEffect(() => {
+    setTasks(getInventoryTasks());
+    setAbnormal(getMissingBooks());
+  }, []);
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <header className="bg-card border-b border-border p-4">
         <h1 className="text-2xl font-bold text-foreground">自动化盘点</h1>
       </header>
@@ -47,7 +46,7 @@ const AutoInventory = () => {
             <Button size="sm">开始新任务</Button>
           </div>
           <div className="space-y-3">
-            {inventoryTasks.map((task) => {
+            {tasks.map((task) => {
               const progress = (task.completed / task.total) * 100;
               return (
                 <Card key={task.id} className="p-4">
@@ -96,7 +95,7 @@ const AutoInventory = () => {
             异常图书列表
           </h3>
           <div className="space-y-3">
-            {missingBooks.map((book) => (
+            {abnormal.map((book) => (
               <Card key={book.id} className="p-4">
                 <div className="flex justify-between items-start">
                   <div>
@@ -115,6 +114,7 @@ const AutoInventory = () => {
           </div>
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 };

@@ -1,48 +1,45 @@
-import { useState } from "react";
-import { Calendar, Clock, Book, RotateCcw, PackageSearch, FileCheck, Send, AlertCircle } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Calendar, Clock, Book, PackageSearch, FileCheck, Send, AlertCircle } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-
-const mockBorrowedBooks = [
-  { id: 1, title: "深度学习", author: "Ian Goodfellow", borrowDate: "2024-01-15", dueDate: "2024-02-15", status: "借阅中" },
-  { id: 2, title: "算法导论", author: "Thomas H. Cormen", borrowDate: "2024-01-20", dueDate: "2024-02-20", status: "借阅中" },
-  { id: 3, title: "Python编程", author: "Eric Matthes", borrowDate: "2024-01-10", dueDate: "2024-02-10", status: "即将到期" },
-];
+import { getBorrowedBooks, BorrowRecord } from "@/lib/localdb";
+import { ServerCog } from "lucide-react";
+import { BottomNav } from "@/components/BottomNav";
 
 const BookBorrow = () => {
-  const [role, setRole] = useState<"reader" | "staff">("reader");
+  const [params] = useSearchParams();
+  const role = useMemo(() => {
+    const r = params.get("role");
+    if (r === "admin" || r === "teacher" || r === "student") return r;
+    return "student";
+  }, [params]);
+  const [borrowed, setBorrowed] = useState<BorrowRecord[]>([]);
 
-  const toggleRole = () => {
-    setRole(prev => prev === "reader" ? "staff" : "reader");
-  };
+  useEffect(() => {
+    setBorrowed(getBorrowedBooks());
+  }, []);
+
+  const roleLabel = role === "admin" ? "管理员" : role === "teacher" ? "教师" : "学员";
 
   return (
     <div className="min-h-screen bg-background pb-20">
       <header className="bg-card border-b border-border p-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-foreground">我的</h1>
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={toggleRole}
-            className="gap-2"
-          >
-            <RotateCcw className="h-4 w-4" />
-            切换到{role === "reader" ? "员工" : "读者"}
-          </Button>
+          <Badge variant="secondary">{roleLabel}</Badge>
         </div>
       </header>
 
       <div className="p-4 space-y-4">
-        {role === "reader" ? (
+        {role !== "admin" ? (
           <>
             {/* 读者菜单 */}
             <section>
               <h2 className="text-base font-semibold mb-3 text-foreground">快捷功能</h2>
               <div className="grid grid-cols-1 gap-3">
-                <Link to="/renewal">
+                <Link to={`/renewal?role=${role}`}>
                   <Card className="p-4 hover:bg-accent transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -55,7 +52,7 @@ const BookBorrow = () => {
                     </div>
                   </Card>
                 </Link>
-                <Link to="/purchase">
+                <Link to={`/purchase?role=${role}`}>
                   <Card className="p-4 hover:bg-accent transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -78,7 +75,7 @@ const BookBorrow = () => {
                 <div className="flex justify-between items-center">
                   <div>
                     <p className="text-sm text-muted-foreground">当前借阅</p>
-                    <p className="text-2xl font-bold text-foreground">3 本</p>
+                    <p className="text-2xl font-bold text-foreground">{borrowed.length} 本</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">借阅额度</p>
@@ -87,7 +84,7 @@ const BookBorrow = () => {
                 </div>
               </Card>
               <div className="space-y-3">
-                {mockBorrowedBooks.map((book) => (
+                {borrowed.map((book) => (
                   <Card key={book.id} className="p-4">
                     <div className="flex gap-4">
                       <div className="w-16 h-20 bg-primary/10 rounded flex items-center justify-center">
@@ -116,10 +113,10 @@ const BookBorrow = () => {
                       </div>
                       <div className="flex flex-col gap-2">
                         <Button size="sm" variant="outline" asChild>
-                          <Link to="/renewal">续借</Link>
+                          <Link to={`/renewal?role=${role}`}>续借</Link>
                         </Button>
                         <Button size="sm" asChild>
-                          <Link to="/return">归还</Link>
+                          <Link to={`/return?role=${role}`}>归还</Link>
                         </Button>
                       </div>
                     </div>
@@ -134,7 +131,7 @@ const BookBorrow = () => {
             <section>
               <h2 className="text-base font-semibold mb-3 text-foreground">管理功能</h2>
               <div className="grid grid-cols-1 gap-3">
-                <Link to="/inventory">
+                <Link to={`/inventory?role=${role}`}>
                   <Card className="p-4 hover:bg-accent transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -147,7 +144,7 @@ const BookBorrow = () => {
                     </div>
                   </Card>
                 </Link>
-                <Link to="/review">
+                <Link to={`/review?role=${role}`}>
                   <Card className="p-4 hover:bg-accent transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -160,11 +157,25 @@ const BookBorrow = () => {
                     </div>
                   </Card>
                 </Link>
+                <Link to={`/remote?role=${role}`}>
+                  <Card className="p-4 hover:bg-accent transition-colors cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
+                        <ServerCog className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <h3 className="font-medium text-foreground">远程管理</h3>
+                        <p className="text-sm text-muted-foreground">系统设置、公告与数据维护</p>
+                      </div>
+                    </div>
+                  </Card>
+                </Link>
               </div>
             </section>
           </>
         )}
       </div>
+      <BottomNav />
     </div>
   );
 };

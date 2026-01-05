@@ -3,25 +3,36 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-
-const mockRenewalBooks = [
-  { id: 1, title: "深度学习", dueDate: "2024-02-15", renewalCount: 1, maxRenewal: 3, canRenew: true },
-  { id: 2, title: "算法导论", dueDate: "2024-02-20", renewalCount: 2, maxRenewal: 3, canRenew: true },
-  { id: 3, title: "Python编程", dueDate: "2024-02-10", renewalCount: 3, maxRenewal: 3, canRenew: false },
-];
+import { useEffect, useState } from "react";
+import { getBorrowedBooks, renewBook, BorrowRecord } from "@/lib/localdb";
+import { useSearchParams } from "react-router-dom";
+import { BottomNav } from "@/components/BottomNav";
 
 const BookRenewal = () => {
-  const handleRenewal = (bookTitle: string) => {
-    toast({
-      title: "续借成功",
-      description: `《${bookTitle}》已成功续借30天`,
-    });
+  const [books, setBooks] = useState<BorrowRecord[]>([]);
+  const [params] = useSearchParams();
+  const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
+
+  useEffect(() => {
+    setBooks(getBorrowedBooks());
+  }, []);
+
+  const canRenew = (b: BorrowRecord) => b.renewalCount < b.maxRenewal;
+
+  const handleRenewal = (bookId: number, bookTitle: string) => {
+    const ok = renewBook(bookId);
+    if (ok) {
+      toast({ title: "续借成功", description: `《${bookTitle}》已成功续借30天` });
+      setBooks(getBorrowedBooks());
+    } else {
+      toast({ title: "不可续借", description: "已达到续借上限", variant: "destructive" });
+    }
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <header className="bg-card border-b border-border p-4">
-        <h1 className="text-2xl font-bold text-foreground">期限与续借</h1>
+        <h1 className="text-2xl font-bold text-foreground">期限与续借（{role === "teacher" ? "教师" : role === "student" ? "学员" : "管理员"}）</h1>
       </header>
 
       <div className="p-4 space-y-4">
@@ -38,7 +49,7 @@ const BookRenewal = () => {
         </Card>
 
         <div className="space-y-3">
-          {mockRenewalBooks.map((book) => {
+          {books.map((book) => {
             const daysUntilDue = Math.ceil((new Date(book.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
             const isOverdue = daysUntilDue < 0;
             const isDueSoon = daysUntilDue <= 7 && daysUntilDue >= 0;
@@ -56,7 +67,7 @@ const BookRenewal = () => {
                         </span>
                       </div>
                     </div>
-                    {book.canRenew ? (
+                    {canRenew(book) ? (
                       <CheckCircle className="h-5 w-5 text-green-500" />
                     ) : (
                       <AlertCircle className="h-5 w-5 text-destructive" />
@@ -72,12 +83,8 @@ const BookRenewal = () => {
                         已续借 {book.renewalCount}/{book.maxRenewal}
                       </Badge>
                     </div>
-                    <Button 
-                      size="sm" 
-                      disabled={!book.canRenew}
-                      onClick={() => handleRenewal(book.title)}
-                    >
-                      {book.canRenew ? "续借" : "不可续借"}
+                    <Button size="sm" disabled={!canRenew(book)} onClick={() => handleRenewal(book.bookId, book.title)}>
+                      {canRenew(book) ? "续借" : "不可续借"}
                     </Button>
                   </div>
                 </div>
@@ -86,6 +93,7 @@ const BookRenewal = () => {
           })}
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 };

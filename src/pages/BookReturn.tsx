@@ -1,8 +1,12 @@
-import { QrCode, MapPin, CheckCircle2 } from "lucide-react";
+import { QrCode, MapPin, CheckCircle2, Book } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
+import { useEffect, useState } from "react";
+import { getBorrowedBooks, returnBook, BorrowRecord } from "@/lib/localdb";
+import { useSearchParams } from "react-router-dom";
+import { BottomNav } from "@/components/BottomNav";
 
 const returnLocations = [
   { id: 1, name: "图书馆一楼总服务台", status: "正常开放", hours: "8:00-22:00" },
@@ -11,7 +15,23 @@ const returnLocations = [
 ];
 
 const BookReturn = () => {
-  const handleReturn = () => {
+  const [borrowed, setBorrowed] = useState<BorrowRecord[]>([]);
+  const [params] = useSearchParams();
+  const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
+
+  useEffect(() => {
+    setBorrowed(getBorrowedBooks());
+  }, []);
+
+  const handleReturn = (bookId?: number, title?: string) => {
+    if (bookId) {
+      const ok = returnBook(bookId);
+      if (ok) {
+        toast({ title: "归还成功", description: `《${title || ""}》已成功归还` });
+        setBorrowed(getBorrowedBooks());
+      }
+      return;
+    }
     toast({
       title: "归还成功",
       description: "图书已成功归还，感谢您的使用",
@@ -19,9 +39,9 @@ const BookReturn = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <header className="bg-card border-b border-border p-4">
-        <h1 className="text-2xl font-bold text-foreground">图书归还</h1>
+        <h1 className="text-2xl font-bold text-foreground">图书归还（{role === "teacher" ? "教师" : role === "student" ? "学员" : "管理员"}）</h1>
       </header>
 
       <div className="p-4 space-y-4">
@@ -33,8 +53,30 @@ const BookReturn = () => {
           <p className="text-sm text-muted-foreground mb-4">
             请在还书点扫描此二维码完成归还
           </p>
-          <Button onClick={handleReturn} className="w-full">确认归还</Button>
+          <Button onClick={() => toast({ title: "归还成功", description: "图书已成功归还，感谢您的使用" })} className="w-full">确认归还</Button>
         </Card>
+
+        <div>
+          <h3 className="font-semibold text-foreground mb-3">我的借阅</h3>
+          <div className="space-y-3">
+            {borrowed.map((b) => (
+              <Card key={b.id} className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                      <Book className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-foreground">{b.title}</h4>
+                      <p className="text-xs text-muted-foreground">到期: {b.dueDate}</p>
+                    </div>
+                  </div>
+                  <Button size="sm" onClick={() => handleReturn(b.bookId, b.title)}>归还</Button>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
 
         <div>
           <h3 className="font-semibold text-foreground mb-3">归还地点</h3>
@@ -59,6 +101,7 @@ const BookReturn = () => {
           </div>
         </div>
       </div>
+      <BottomNav />
     </div>
   );
 };

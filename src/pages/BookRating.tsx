@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Star, Send } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,18 +6,32 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-
-const mockReadBooks = [
-  { id: 1, title: "深度学习", author: "Ian Goodfellow", rated: false },
-  { id: 2, title: "算法导论", author: "Thomas H. Cormen", rated: true, rating: 5 },
-  { id: 3, title: "Python编程", author: "Eric Matthes", rated: false },
-];
+import { getBorrowedBooks, getRatings, submitRating } from "@/lib/localdb";
+import { useSearchParams } from "react-router-dom";
+import { BottomNav } from "@/components/BottomNav";
 
 const BookRating = () => {
   const [selectedBook, setSelectedBook] = useState<number | null>(null);
   const [rating, setRating] = useState(0);
   const [hoveredRating, setHoveredRating] = useState(0);
   const [review, setReview] = useState("");
+  const [readBooks, setReadBooks] = useState<Array<{ id: number; title: string; author: string; rated: boolean; rating?: number }>>([]);
+  const [params] = useSearchParams();
+  const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
+
+  const refresh = () => {
+    const borrowed = getBorrowedBooks();
+    const ratings = getRatings();
+    const list = borrowed.map(b => {
+      const r = ratings.find(x => x.bookId === b.bookId);
+      return { id: b.bookId, title: b.title, author: b.author, rated: !!r, rating: r?.rating };
+    });
+    setReadBooks(list);
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
 
   const handleSubmit = () => {
     if (rating === 0) {
@@ -29,26 +43,27 @@ const BookRating = () => {
       return;
     }
 
-    toast({
-      title: "评价成功",
-      description: "感谢您的评价！",
-    });
+    if (selectedBook) {
+      submitRating(selectedBook, rating, review || undefined);
+      toast({ title: "评价成功", description: "感谢您的评价！" });
+      refresh();
+    }
     setSelectedBook(null);
     setRating(0);
     setReview("");
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <header className="bg-card border-b border-border p-4">
-        <h1 className="text-2xl font-bold text-foreground">图书评价</h1>
+        <h1 className="text-2xl font-bold text-foreground">图书评价（{role === "teacher" ? "教师" : role === "student" ? "学员" : "管理员"}）</h1>
       </header>
 
       <div className="p-4 space-y-4">
         <div>
           <h3 className="font-semibold text-foreground mb-3">待评价图书</h3>
           <div className="space-y-3">
-            {mockReadBooks.map((book) => (
+            {readBooks.map((book) => (
               <Card 
                 key={book.id} 
                 className={cn(
@@ -127,6 +142,7 @@ const BookRating = () => {
           </Card>
         )}
       </div>
+      <BottomNav />
     </div>
   );
 };

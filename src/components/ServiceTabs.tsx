@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 const tabs = [
   { id: "online", label: "在线服务" },
@@ -10,13 +11,26 @@ const tabs = [
 
 export const ServiceTabs = () => {
   const [activeTab, setActiveTab] = useState("borrow");
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
+  const routeMap: Record<string, string> = {
+    online: "/search",
+    borrow: "/borrow",
+    search: "/search",
+    rating: "/rating",
+  };
 
   return (
     <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto bg-card">
       {tabs.map((tab) => (
         <button
           key={tab.id}
-          onClick={() => setActiveTab(tab.id)}
+          onClick={() => {
+            setActiveTab(tab.id);
+            const to = routeMap[tab.id] || "/";
+            navigate(`${to}?role=${role}`);
+          }}
           className={cn(
             "px-4 py-2 text-sm font-medium whitespace-nowrap rounded-lg transition-colors",
             activeTab === tab.id
