@@ -15,6 +15,8 @@ const BookBorrow = () => {
     if (r === "admin" || r === "teacher" || r === "student") return r;
     return "student";
   }, [params]);
+  const token = params.get("token");
+  const q = `?role=${role}${token ? `&token=${token}` : ""}`;
   const [borrowed, setBorrowed] = useState<BorrowRecord[]>([]);
 
   useEffect(() => {
@@ -39,7 +41,7 @@ const BookBorrow = () => {
             <section>
               <h2 className="text-base font-semibold mb-3 text-foreground">快捷功能</h2>
               <div className="grid grid-cols-1 gap-3">
-                <Link to={`/renewal?role=${role}`}>
+                <Link to={`/renewal${q}`}>
                   <Card className="p-4 hover:bg-accent transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -144,7 +146,7 @@ const BookBorrow = () => {
                     </div>
                   </Card>
                 </Link>
-                <Link to={`/review?role=${role}`}>
+                <Link to={`/review${q}`}>
                   <Card className="p-4 hover:bg-accent transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">
@@ -157,7 +159,7 @@ const BookBorrow = () => {
                     </div>
                   </Card>
                 </Link>
-                <Link to={`/remote?role=${role}`}>
+                <Link to={`/remote${q}`}>
                   <Card className="p-4 hover:bg-accent transition-colors cursor-pointer">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center">

@@ -1,5 +1,38 @@
-const KEY_PREFIX = "lps.";
+const API_BASE = (import.meta.env as any).VITE_API_BASE || "";
+function joinUrl(base: string, path: string) {
+  if (!base) return path;
+  if (base.endsWith("/") && path.startsWith("/")) return base.slice(0, -1) + path;
+  if (!base.endsWith("/") && !path.startsWith("/")) return base + "/" + path;
+  return base + path;
+}
+const API_SAVE = joinUrl(API_BASE, "/zyts/commonSave");
+const API_GET = joinUrl(API_BASE, "/zyts/commonGet");
+const DATA_KEY = "lps.data";
+const EXPIRE_DAYS = 90;
 
+const SESSION_TOKEN_KEY = "lps.sessionToken";
+function getSessionToken(): string | null {
+  try {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const t = sp.get("token");
+      if (t) {
+        try {
+          window.sessionStorage?.setItem(SESSION_TOKEN_KEY, t);
+        } catch {}
+        return t;
+      }
+      try {
+        return window.sessionStorage?.getItem(SESSION_TOKEN_KEY) || null;
+      } catch {
+        return null;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 type BookStatus = "可借" | "已借出";
 export interface Book {
   id: number;
@@ -80,67 +113,22 @@ export interface Announcement {
   date: string;
 }
 
-function get<T>(key: string, fallback: T): T {
-  const raw = localStorage.getItem(KEY_PREFIX + key);
-  if (!raw) return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
+type AllData = {
+  books: Book[];
+  borrowRecords: BorrowRecord[];
+  ratings: RatingRecord[];
+  requests: PurchaseRequest[];
+  inventoryTasks: InventoryTask[];
+  missingBooks: MissingBook[];
+  counters: Counters;
+  remoteSettings: RemoteSettings;
+  announcements: Announcement[];
+  seeded?: boolean;
+};
 
-function set<T>(key: string, value: T) {
-  localStorage.setItem(KEY_PREFIX + key, JSON.stringify(value));
-}
+let DATA: AllData | null = null;
 
-function today(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = `${d.getMonth() + 1}`.padStart(2, "0");
-  const dd = `${d.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-
-function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  const y = d.getFullYear();
-  const m = `${d.getMonth() + 1}`.padStart(2, "0");
-  const dd = `${d.getDate()}`.padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-
-function resetDailyCounters(counters: Counters): Counters {
-  const t = today();
-  if (counters.lastCounterDate !== t) {
-    return {
-      todaySearchCount: 0,
-      totalSearchCount: counters.totalSearchCount,
-      todayBorrowCount: 0,
-      todayReturnCount: 0,
-      todayRenewalCount: 0,
-      lastCounterDate: t,
-    };
-  }
-  return counters;
-}
-
-export function bootstrapLocalData() {
-  const seeded = get<boolean>("seeded", false);
-  if (seeded) {
-    const counters = resetDailyCounters(get<Counters>("counters", {
-      todaySearchCount: 0,
-      totalSearchCount: 0,
-      todayBorrowCount: 0,
-      todayReturnCount: 0,
-      todayRenewalCount: 0,
-      lastCounterDate: today(),
-    }));
-    set("counters", counters);
-    return;
-  }
-
+function defaultData(): AllData {
   const books: Book[] = [
     { id: 1, title: "深度学习", author: "Ian Goodfellow", category: "计算机科学", status: "可借", rating: 4.8, location: "A区-301", isbn: "9787121293880" },
     { id: 2, title: "人工智能简史", author: "尼克", category: "科技", status: "已借出", rating: 4.5, location: "A区-205" },
@@ -186,32 +174,163 @@ export function bootstrapLocalData() {
     lastCounterDate: today(),
   };
 
-  set("books", books);
-  set("borrowRecords", borrowRecords);
-  set("ratings", ratings);
-  set("requests", requests);
-  set("inventoryTasks", inventoryTasks);
-  set("missingBooks", missingBooks);
-  set("counters", counters);
-  set("seeded", true);
+  const remoteSettings: RemoteSettings = {
+    maintenanceMode: false,
+    allowRemoteBorrow: true,
+  };
+
+  const announcements: Announcement[] = [];
+
+  return {
+    books,
+    borrowRecords,
+    ratings,
+    requests,
+    inventoryTasks,
+    missingBooks,
+    counters,
+    remoteSettings,
+    announcements,
+    seeded: true,
+  };
+}
+
+function xhrPost(url: string, body: any): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    const token = getSessionToken();
+    if (token) xhr.setRequestHeader("session-id", token);
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(String(xhr.status)));
+      }
+    };
+    xhr.onerror = () => reject(new Error("network error"));
+    xhr.send(JSON.stringify(body));
+  });
+}
+
+function xhrGet(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+    const token = getSessionToken();
+    if (token) xhr.setRequestHeader("session-id", token);
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState === 4) {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(xhr.responseText || "");
+        else reject(new Error(String(xhr.status)));
+      }
+    };
+    xhr.onerror = () => reject(new Error("network error"));
+    xhr.send();
+  });
+}
+
+function saveAll(): void {
+  if (!DATA) return;
+  const payload = {
+    expireDays: EXPIRE_DAYS,
+    key: DATA_KEY,
+    value: JSON.stringify(DATA),
+  };
+  (async () => {
+    try {
+      await xhrPost(API_SAVE, payload);
+    } catch (e) {
+      void e;
+    }
+  })();
+}
+
+async function loadAllFromRemote(): Promise<AllData | null> {
+  try {
+    const text = await xhrGet(`${API_GET}?key=${encodeURIComponent(DATA_KEY)}`);
+    let valueStr: string | null = null;
+    try {
+      const json = JSON.parse(text);
+      if (typeof json === "string") valueStr = json;
+      else if (json && typeof (json as any).value === "string") valueStr = (json as any).value;
+      else if (json && typeof (json as any).data === "string") valueStr = (json as any).data;
+      else if ((json as any)?.data && typeof (json as any).data.value === "string") valueStr = (json as any).data.value;
+    } catch {
+      valueStr = text || null;
+    }
+    if (!valueStr) return null;
+    try {
+      const parsed = JSON.parse(valueStr) as AllData;
+      return parsed;
+    } catch {
+      return null;
+    }
+  } catch {
+    return null;
+  }
+}
+
+function ensureData(): AllData {
+  if (!DATA) DATA = defaultData();
+  return DATA;
+}
+
+function today(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = `${d.getMonth() + 1}`.padStart(2, "0");
+  const dd = `${d.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = `${d.getMonth() + 1}`.padStart(2, "0");
+  const dd = `${d.getDate()}`.padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function resetDailyCounters(counters: Counters): Counters {
+  const t = today();
+  if (counters.lastCounterDate !== t) {
+    return {
+      todaySearchCount: 0,
+      totalSearchCount: counters.totalSearchCount,
+      todayBorrowCount: 0,
+      todayReturnCount: 0,
+      todayRenewalCount: 0,
+      lastCounterDate: t,
+    };
+  }
+  return counters;
+}
+
+export async function bootstrapLocalData() {
+  const remote = await loadAllFromRemote();
+  if (remote) {
+    DATA = remote;
+    const counters = resetDailyCounters(DATA.counters);
+    DATA.counters = counters;
+    saveAll();
+    return;
+  }
+  DATA = defaultData();
+  saveAll();
 }
 
 export function getBooks(): Book[] {
-  return get<Book[]>("books", []);
+  return ensureData().books;
 }
 
 export function searchBooks(q: string, category: string | "all"): Book[] {
-  const counters = resetDailyCounters(get<Counters>("counters", {
-    todaySearchCount: 0,
-    totalSearchCount: 0,
-    todayBorrowCount: 0,
-    todayReturnCount: 0,
-    todayRenewalCount: 0,
-    lastCounterDate: today(),
-  }));
+  const counters = resetDailyCounters(ensureData().counters);
   counters.todaySearchCount += 1;
   counters.totalSearchCount += 1;
-  set("counters", counters);
+  ensureData().counters = counters;
+  saveAll();
   const books = getBooks();
   const term = q.trim().toLowerCase();
   return books.filter(b => {
@@ -226,8 +345,8 @@ export function borrowBook(bookId: number): boolean {
   const book = books.find(b => b.id === bookId);
   if (!book || book.status !== "可借") return false;
   book.status = "已借出";
-  set("books", books);
-  const records = get<BorrowRecord[]>("borrowRecords", []);
+  ensureData().books = books;
+  const records = ensureData().borrowRecords;
   const record: BorrowRecord = {
     id: records.length ? Math.max(...records.map(r => r.id)) + 1 : 1,
     bookId: book.id,
@@ -240,22 +359,16 @@ export function borrowBook(bookId: number): boolean {
     status: "借阅中",
   };
   records.push(record);
-  set("borrowRecords", records);
-  const counters = resetDailyCounters(get<Counters>("counters", {
-    todaySearchCount: 0,
-    totalSearchCount: 0,
-    todayBorrowCount: 0,
-    todayReturnCount: 0,
-    todayRenewalCount: 0,
-    lastCounterDate: today(),
-  }));
+  ensureData().borrowRecords = records;
+  const counters = resetDailyCounters(ensureData().counters);
   counters.todayBorrowCount += 1;
-  set("counters", counters);
+  ensureData().counters = counters;
+  saveAll();
   return true;
 }
 
 export function getBorrowedBooks(): BorrowRecord[] {
-  const records = get<BorrowRecord[]>("borrowRecords", []);
+  const records = ensureData().borrowRecords;
   return records.map(r => {
     const daysUntilDue = Math.ceil((new Date(r.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
     const status = daysUntilDue <= 7 ? "即将到期" : "借阅中";
@@ -268,57 +381,46 @@ export function returnBook(bookId: number): boolean {
   const book = books.find(b => b.id === bookId);
   if (!book) return false;
   book.status = "可借";
-  set("books", books);
-  let records = get<BorrowRecord[]>("borrowRecords", []);
+  ensureData().books = books;
+  let records = ensureData().borrowRecords;
   records = records.filter(r => r.bookId !== bookId);
-  set("borrowRecords", records);
-  const counters = resetDailyCounters(get<Counters>("counters", {
-    todaySearchCount: 0,
-    totalSearchCount: 0,
-    todayBorrowCount: 0,
-    todayReturnCount: 0,
-    todayRenewalCount: 0,
-    lastCounterDate: today(),
-  }));
+  ensureData().borrowRecords = records;
+  const counters = resetDailyCounters(ensureData().counters);
   counters.todayReturnCount += 1;
-  set("counters", counters);
+  ensureData().counters = counters;
+  saveAll();
   return true;
 }
 
 export function renewBook(bookId: number): boolean {
-  const records = get<BorrowRecord[]>("borrowRecords", []);
+  const records = ensureData().borrowRecords;
   const record = records.find(r => r.bookId === bookId);
   if (!record) return false;
   if (record.renewalCount >= record.maxRenewal) return false;
   record.renewalCount += 1;
   record.dueDate = addDays(record.dueDate, 30);
-  set("borrowRecords", records);
-  const counters = resetDailyCounters(get<Counters>("counters", {
-    todaySearchCount: 0,
-    totalSearchCount: 0,
-    todayBorrowCount: 0,
-    todayReturnCount: 0,
-    todayRenewalCount: 0,
-    lastCounterDate: today(),
-  }));
+  ensureData().borrowRecords = records;
+  const counters = resetDailyCounters(ensureData().counters);
   counters.todayRenewalCount += 1;
-  set("counters", counters);
+  ensureData().counters = counters;
+  saveAll();
   return true;
 }
 
 export function getRatings(): RatingRecord[] {
-  return get<RatingRecord[]>("ratings", []);
+  return ensureData().ratings;
 }
 
 export function submitRating(bookId: number, rating: number, review?: string) {
   const ratings = getRatings();
   const id = ratings.length ? Math.max(...ratings.map(r => r.id)) + 1 : 1;
   ratings.push({ id, bookId, rating, review, date: today() });
-  set("ratings", ratings);
+  ensureData().ratings = ratings;
+  saveAll();
 }
 
 export function getPurchaseRequests(): PurchaseRequest[] {
-  return get<PurchaseRequest[]>("requests", []);
+  return ensureData().requests;
 }
 
 export function submitPurchaseRequest(data: { bookTitle: string; author?: string; isbn?: string; reason: string; }) {
@@ -334,44 +436,39 @@ export function submitPurchaseRequest(data: { bookTitle: string; author?: string
     status: "审核中",
   };
   requests.unshift(item);
-  set("requests", requests);
+  ensureData().requests = requests;
+  saveAll();
 }
 
 export function getInventoryTasks(): InventoryTask[] {
-  return get<InventoryTask[]>("inventoryTasks", []);
+  return ensureData().inventoryTasks;
 }
 
 export function getMissingBooks(): MissingBook[] {
-  return get<MissingBook[]>("missingBooks", []);
+  return ensureData().missingBooks;
 }
 
 export function getCounters(): Counters {
-  return resetDailyCounters(get<Counters>("counters", {
-    todaySearchCount: 0,
-    totalSearchCount: 0,
-    todayBorrowCount: 0,
-    todayReturnCount: 0,
-    todayRenewalCount: 0,
-    lastCounterDate: today(),
-  }));
+  const counters = resetDailyCounters(ensureData().counters);
+  ensureData().counters = counters;
+  saveAll();
+  return counters;
 }
 
 export function getRemoteSettings(): RemoteSettings {
-  return get<RemoteSettings>("remoteSettings", {
-    maintenanceMode: false,
-    allowRemoteBorrow: true,
-  });
+  return ensureData().remoteSettings;
 }
 
 export function updateRemoteSettings(patch: Partial<RemoteSettings>) {
   const current = getRemoteSettings();
   const next = { ...current, ...patch };
-  set("remoteSettings", next);
+  ensureData().remoteSettings = next;
+  saveAll();
   return next;
 }
 
 export function getAnnouncements(): Announcement[] {
-  return get<Announcement[]>("announcements", []);
+  return ensureData().announcements;
 }
 
 export function addAnnouncement(title: string, content: string) {
@@ -379,21 +476,22 @@ export function addAnnouncement(title: string, content: string) {
   const id = items.length ? Math.max(...items.map(a => a.id)) + 1 : 1;
   const date = today();
   items.unshift({ id, title, content, date });
-  set("announcements", items);
+  ensureData().announcements = items;
+  saveAll();
   return id;
 }
 
 export function exportAllData() {
   return {
-    books: getBooks(),
-    borrowRecords: get<BorrowRecord[]>("borrowRecords", []),
-    ratings: getRatings(),
-    requests: getPurchaseRequests(),
-    inventoryTasks: getInventoryTasks(),
-    missingBooks: getMissingBooks(),
-    counters: getCounters(),
-    remoteSettings: getRemoteSettings(),
-    announcements: getAnnouncements(),
+    books: ensureData().books,
+    borrowRecords: ensureData().borrowRecords,
+    ratings: ensureData().ratings,
+    requests: ensureData().requests,
+    inventoryTasks: ensureData().inventoryTasks,
+    missingBooks: ensureData().missingBooks,
+    counters: ensureData().counters,
+    remoteSettings: ensureData().remoteSettings,
+    announcements: ensureData().announcements,
   };
 }
 
@@ -408,30 +506,21 @@ export function importAllData(payload: {
   remoteSettings?: RemoteSettings;
   announcements?: Announcement[];
 }) {
-  if (payload.books) set("books", payload.books);
-  if (payload.borrowRecords) set("borrowRecords", payload.borrowRecords);
-  if (payload.ratings) set("ratings", payload.ratings);
-  if (payload.requests) set("requests", payload.requests);
-  if (payload.inventoryTasks) set("inventoryTasks", payload.inventoryTasks);
-  if (payload.missingBooks) set("missingBooks", payload.missingBooks);
-  if (payload.counters) set("counters", payload.counters);
-  if (payload.remoteSettings) set("remoteSettings", payload.remoteSettings);
-  if (payload.announcements) set("announcements", payload.announcements);
-  set("seeded", true);
+  const data = ensureData();
+  if (payload.books) data.books = payload.books;
+  if (payload.borrowRecords) data.borrowRecords = payload.borrowRecords;
+  if (payload.ratings) data.ratings = payload.ratings;
+  if (payload.requests) data.requests = payload.requests;
+  if (payload.inventoryTasks) data.inventoryTasks = payload.inventoryTasks;
+  if (payload.missingBooks) data.missingBooks = payload.missingBooks;
+  if (payload.counters) data.counters = payload.counters;
+  if (payload.remoteSettings) data.remoteSettings = payload.remoteSettings;
+  if (payload.announcements) data.announcements = payload.announcements;
+  data.seeded = true;
+  saveAll();
 }
 
 export function clearAllData() {
-  const keys = [
-    "books",
-    "borrowRecords",
-    "ratings",
-    "requests",
-    "inventoryTasks",
-    "missingBooks",
-    "counters",
-    "remoteSettings",
-    "announcements",
-    "seeded",
-  ];
-  keys.forEach(k => localStorage.removeItem(KEY_PREFIX + k));
+  DATA = defaultData();
+  saveAll();
 }

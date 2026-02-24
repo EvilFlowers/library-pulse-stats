@@ -14,6 +14,7 @@ export const ServiceTabs = () => {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
+  const token = params.get("token");
   const routeMap: Record<string, string> = {
     online: "/search",
     borrow: "/borrow",
@@ -29,7 +30,7 @@ export const ServiceTabs = () => {
           onClick={() => {
             setActiveTab(tab.id);
             const to = routeMap[tab.id] || "/";
-            navigate(`${to}?role=${role}`);
+            navigate(`${to}?role=${role}${token ? `&token=${token}` : ""}`);
           }}
           className={cn(
             "px-4 py-2 text-sm font-medium whitespace-nowrap rounded-lg transition-colors",

@@ -3,5 +3,8 @@ import App from "./App.tsx";
 import "./index.css";
 import { bootstrapLocalData } from "@/lib/localdb";
 
-bootstrapLocalData();
-createRoot(document.getElementById("root")!).render(<App />);
+async function start() {
+  await bootstrapLocalData();
+  createRoot(document.getElementById("root")!).render(<App />);
+}
+start();
