@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import { getBorrowedBooks, renewBook, BorrowRecord } from "@/lib/localdb";
+import { getBorrowedBooks, renewBook, BorrowRecord, refreshDataFromRemote } from "@/lib/localdb";
 import { useSearchParams } from "react-router-dom";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -14,7 +14,10 @@ const BookRenewal = () => {
   const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
 
   useEffect(() => {
-    setBooks(getBorrowedBooks());
+    (async () => {
+      await refreshDataFromRemote();
+      setBooks(getBorrowedBooks());
+    })();
   }, []);
 
   const canRenew = (b: BorrowRecord) => b.renewalCount < b.maxRenewal;

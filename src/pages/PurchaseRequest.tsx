@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
-import { getPurchaseRequests, submitPurchaseRequest, PurchaseRequest as PR } from "@/lib/localdb";
+import { getPurchaseRequests, submitPurchaseRequest, PurchaseRequest as PR, refreshDataFromRemote } from "@/lib/localdb";
 import { useSearchParams } from "react-router-dom";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -22,16 +22,19 @@ const PurchaseRequest = () => {
   const [params] = useSearchParams();
   const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
 
-  const refresh = () => setRequests(getPurchaseRequests());
+  const refreshLocal = () => setRequests(getPurchaseRequests());
   useEffect(() => {
-    refresh();
+    (async () => {
+      await refreshDataFromRemote();
+      refreshLocal();
+    })();
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     submitPurchaseRequest(formData);
     toast({ title: "提交成功", description: "您的采购需求已提交，我们会尽快处理" });
-    refresh();
+    refreshLocal();
     setFormData({ bookTitle: "", author: "", isbn: "", reason: "" });
   };
 

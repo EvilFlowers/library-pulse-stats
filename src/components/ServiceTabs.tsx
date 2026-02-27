@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 const tabs = [
-  { id: "online", label: "在线服务" },
+  // { id: "online", label: "在线服务" },
   { id: "borrow", label: "借还管理" },
   { id: "search", label: "图书查询" },
   { id: "rating", label: "图书评价" },

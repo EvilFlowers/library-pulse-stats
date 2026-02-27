@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
-import { getRemoteSettings, updateRemoteSettings, getAnnouncements, addAnnouncement, exportAllData, importAllData, clearAllData, bootstrapLocalData } from "@/lib/localdb";
+import { getRemoteSettings, updateRemoteSettings, getAnnouncements, addAnnouncement, exportAllData, importAllData, clearAllData, bootstrapLocalData, refreshDataFromRemote } from "@/lib/localdb";
 import { useSearchParams } from "react-router-dom";
 
 const RemoteManagement = () => {
@@ -24,8 +24,11 @@ const RemoteManagement = () => {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    setSettings(getRemoteSettings());
-    setAnnouncements(getAnnouncements());
+    (async () => {
+      await refreshDataFromRemote();
+      setSettings(getRemoteSettings());
+      setAnnouncements(getAnnouncements());
+    })();
   }, []);
 
   const handleToggle = (key: "maintenanceMode" | "allowRemoteBorrow", value: boolean) => {

@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import { getPurchaseRequests } from "@/lib/localdb";
+import { getPurchaseRequests, refreshDataFromRemote, approvePurchaseRequest, rejectPurchaseRequest } from "@/lib/localdb";
 import { useSearchParams } from "react-router-dom";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -15,7 +15,8 @@ const ResourceReview = () => {
   const [params] = useSearchParams();
   const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
 
-  const refresh = () => {
+  const refresh = async (pullRemote: boolean = true) => {
+    if (pullRemote) await refreshDataFromRemote();
     const reqs = getPurchaseRequests();
     const pending = reqs.filter(r => r.status === "审核中").map(r => ({
       id: r.id,
@@ -29,28 +30,35 @@ const ResourceReview = () => {
       title: r.title,
       reviewer: "管理员",
       reviewDate: r.submittedDate,
-      status: r.status === "已批准" ? "已通过" : "已拒绝",
+      status: r.status === "已批准" || r.status === "已采购" ? "已通过" : "已拒绝",
     }));
     setPendingReviews(pending);
     setReviewedItems(reviewed);
   };
 
   useEffect(() => {
-    refresh();
+    (async () => {
+      await refresh(true);
+    })();
   }, []);
-  const handleApprove = (title: string) => {
-    toast({
-      title: "审核通过",
-      description: `《${title}》已通过审核`,
-    });
+  const handleApprove = async (id: number, title: string) => {
+    const ok = approvePurchaseRequest(id);
+    if (ok) {
+      toast({ title: "审核通过", description: `《${title}》已通过审核` });
+      await refresh(false);
+    } else {
+      toast({ title: "操作失败", description: "无法通过该申请", variant: "destructive" });
+    }
   };
 
-  const handleReject = (title: string) => {
-    toast({
-      title: "审核拒绝",
-      description: `《${title}》已被拒绝`,
-      variant: "destructive",
-    });
+  const handleReject = async (id: number, title: string) => {
+    const ok = rejectPurchaseRequest(id);
+    if (ok) {
+      toast({ title: "审核拒绝", description: `《${title}》已被拒绝`, variant: "destructive" });
+      await refresh(false);
+    } else {
+      toast({ title: "操作失败", description: "无法拒绝该申请", variant: "destructive" });
+    }
   };
 
   return (
@@ -100,7 +108,7 @@ const ResourceReview = () => {
                     <Button 
                       size="sm" 
                       variant="default"
-                      onClick={() => handleApprove(item.title)}
+                      onClick={() => handleApprove(item.id, item.title)}
                       className="flex-1"
                     >
                       <CheckCircle2 className="h-4 w-4 mr-1" />
@@ -109,7 +117,7 @@ const ResourceReview = () => {
                     <Button 
                       size="sm" 
                       variant="destructive"
-                      onClick={() => handleReject(item.title)}
+                      onClick={() => handleReject(item.id, item.title)}
                       className="flex-1"
                     >
                       <XCircle className="h-4 w-4 mr-1" />

@@ -73,7 +73,7 @@ export interface PurchaseRequest {
   isbn?: string;
   reason: string;
   submittedDate: string;
-  status: "审核中" | "已批准" | "已采购";
+  status: "审核中" | "已批准" | "已采购" | "已拒绝";
 }
 
 export interface InventoryTask {
@@ -246,6 +246,34 @@ function saveAll(): void {
   })();
 }
 
+async function saveAllStrict(): Promise<boolean> {
+  if (!DATA) return false;
+  const payload = {
+    expireDays: EXPIRE_DAYS,
+    key: DATA_KEY,
+    value: JSON.stringify(DATA),
+  };
+  try {
+    await xhrPost(API_SAVE, payload);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function applyStrict(mutator: (d: AllData) => void): Promise<boolean> {
+  const data = ensureData();
+  const prevStr = JSON.stringify(data);
+  mutator(data);
+  const ok = await saveAllStrict();
+  if (!ok) {
+    try {
+      DATA = JSON.parse(prevStr) as AllData;
+    } catch {}
+  }
+  return ok;
+}
+
 async function loadAllFromRemote(): Promise<AllData | null> {
   try {
     const text = await xhrGet(`${API_GET}?key=${encodeURIComponent(DATA_KEY)}`);
@@ -319,6 +347,22 @@ export async function bootstrapLocalData() {
   }
   DATA = defaultData();
   saveAll();
+}
+
+export async function refreshDataFromRemote(): Promise<boolean> {
+  try {
+    const remote = await loadAllFromRemote();
+    if (remote) {
+      DATA = remote;
+      const counters = resetDailyCounters(DATA.counters);
+      DATA.counters = counters;
+      saveAll();
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 export function getBooks(): Book[] {
@@ -440,12 +484,169 @@ export function submitPurchaseRequest(data: { bookTitle: string; author?: string
   saveAll();
 }
 
+export function approvePurchaseRequest(id: number): boolean {
+  const requests = getPurchaseRequests();
+  const req = requests.find(r => r.id === id);
+  if (!req) return false;
+  req.status = "已批准";
+  ensureData().requests = requests;
+  saveAll();
+  return true;
+}
+
+export function rejectPurchaseRequest(id: number): boolean {
+  const requests = getPurchaseRequests();
+  const req = requests.find(r => r.id === id);
+  if (!req) return false;
+  req.status = "已拒绝";
+  ensureData().requests = requests;
+  saveAll();
+  return true;
+}
+
 export function getInventoryTasks(): InventoryTask[] {
   return ensureData().inventoryTasks;
 }
 
 export function getMissingBooks(): MissingBook[] {
   return ensureData().missingBooks;
+}
+
+function areaFromLocation(location: string): string | null {
+  const idx = location.indexOf("区-");
+  if (idx < 0) return null;
+  const zone = location.slice(0, idx + 1);
+  const rest = location.slice(idx + 2);
+  const digits = rest.replace(/\D/g, "");
+  if (!digits) return null;
+  const floor = digits[0];
+  if (!floor) return null;
+  return `${zone}-${floor}楼`;
+}
+
+export async function startNextInventoryTask(): Promise<boolean> {
+  const data = ensureData();
+  const next = data.inventoryTasks.find(t => t.status === "待开始");
+  if (!next) return false;
+  const ok = await applyStrict(d => {
+    const n = d.inventoryTasks.find(t => t.id === next.id);
+    if (!n) return;
+    n.status = "进行中";
+    generateMissingForTask(n.id);
+    syncMissingCounts();
+  });
+  return ok;
+}
+
+export async function resolveMissingBook(id: number): Promise<boolean> {
+  const items = ensureData().missingBooks;
+  const idx = items.findIndex(b => b.id === id);
+  if (idx < 0) return false;
+  const book = items[idx];
+  const ok = await applyStrict(d => {
+    const arr = d.missingBooks;
+    const i = arr.findIndex(b => b.id === id);
+    if (i < 0) return;
+    const b = arr[i];
+    arr.splice(i, 1);
+    const area = areaFromLocation(b.location);
+    if (area) {
+      const task = d.inventoryTasks.find(t => t.area === area);
+      if (task && task.missing > 0) {
+        task.missing -= 1;
+      }
+    }
+    syncMissingCounts();
+  });
+  return ok;
+}
+
+function areaFromZoneFloor(zone: string, floor: number): string {
+  const z = zone.trim().toUpperCase();
+  const f = Math.max(0, Math.floor(Number(floor)));
+  return `${z}区-${f}楼`;
+}
+
+export async function createInventoryTask(zone: string, floor: number, total: number): Promise<number | null> {
+  const tasks = ensureData().inventoryTasks;
+  const id = tasks.length ? Math.max(...tasks.map(t => t.id)) + 1 : 1;
+  const area = areaFromZoneFloor(zone, floor);
+  const ok = await applyStrict(d => {
+    const arr = d.inventoryTasks;
+    arr.push({
+      id,
+      area,
+      total: Math.max(0, Math.floor(Number(total))),
+      completed: 0,
+      missing: 0,
+      status: "待开始",
+    });
+  });
+  if (!ok) return null;
+  return id;
+}
+
+function parseArea(area: string): { zone: string; floor: number } | null {
+  const m = area.match(/^([A-Z])区-(\d+)楼$/i);
+  if (!m) return null;
+  const zone = m[1].toUpperCase();
+  const floor = Number(m[2]);
+  if (!floor || floor < 0) return null;
+  return { zone, floor };
+}
+
+function randInt(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function buildLocation(zone: string, floor: number): string {
+  const shelf = String(randInt(1, 50)).padStart(2, "0");
+  return `${zone}区-${floor}${shelf}`;
+}
+
+function nextMissingId(): number {
+  const items = ensureData().missingBooks;
+  return items.length ? Math.max(...items.map(i => i.id)) + 1 : 1;
+}
+
+function generateMissingForTask(taskId: number): number {
+  const tasks = ensureData().inventoryTasks;
+  const t = tasks.find(x => x.id === taskId);
+  if (!t) return 0;
+  const pf = parseArea(t.area);
+  if (!pf) return 0;
+  const { zone, floor } = pf;
+  const items = ensureData().missingBooks;
+  const books = ensureData().books.filter(b => areaFromLocation(b.location) === t.area);
+  const count = randInt(1, 2);
+  let added = 0;
+  for (let i = 0; i < count; i++) {
+    const candidate = books.length ? books[randInt(0, books.length - 1)] : null;
+    const location = candidate ? candidate.location : buildLocation(zone, floor);
+    if (items.some(it => it.location === location)) continue;
+    const title = candidate ? candidate.title : `馆藏-${zone}${floor}-${String(randInt(100, 999))}`;
+    const id = nextMissingId();
+    const lastSeen = addDays(today(), -randInt(10, 30));
+    items.push({ id, title, location, lastSeen });
+    added += 1;
+  }
+  ensureData().missingBooks = items;
+  return added;
+}
+
+function syncMissingCounts() {
+  const tasks = ensureData().inventoryTasks;
+  const items = ensureData().missingBooks;
+  const counts: Record<string, number> = {};
+  for (const it of items) {
+    const area = areaFromLocation(it.location);
+    if (!area) continue;
+    counts[area] = (counts[area] || 0) + 1;
+  }
+  for (const t of tasks) {
+    t.missing = counts[t.area] || 0;
+  }
+  ensureData().inventoryTasks = tasks;
 }
 
 export function getCounters(): Counters {

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { useEffect, useState } from "react";
-import { getBorrowedBooks, returnBook, BorrowRecord } from "@/lib/localdb";
+import { getBorrowedBooks, returnBook, BorrowRecord, refreshDataFromRemote } from "@/lib/localdb";
 import { useSearchParams } from "react-router-dom";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -20,7 +20,10 @@ const BookReturn = () => {
   const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
 
   useEffect(() => {
-    setBorrowed(getBorrowedBooks());
+    (async () => {
+      await refreshDataFromRemote();
+      setBorrowed(getBorrowedBooks());
+    })();
   }, []);
 
   const handleReturn = (bookId?: number, title?: string) => {

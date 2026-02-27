@@ -5,7 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { searchBooks, borrowBook, Book as BookType } from "@/lib/localdb";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { Label } from "@/components/ui/label";
+import { searchBooks, borrowBook, Book as BookType, refreshDataFromRemote } from "@/lib/localdb";
 import { toast } from "@/hooks/use-toast";
 import { useSearchParams } from "react-router-dom";
 import { BottomNav } from "@/components/BottomNav";
@@ -14,6 +18,9 @@ const BookSearch = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [category, setCategory] = useState("all");
   const [books, setBooks] = useState<BookType[]>([]);
+  const [onlyAvailable, setOnlyAvailable] = useState(false);
+  const [minRating, setMinRating] = useState(0);
+  const [sortBy, setSortBy] = useState<"none" | "rating_desc">("none");
   const [params] = useSearchParams();
   const role = useMemo(() => {
     const r = params.get("role");
@@ -24,6 +31,19 @@ const BookSearch = () => {
   useEffect(() => {
     setBooks(searchBooks(searchTerm, category));
   }, [searchTerm, category]);
+  useEffect(() => {
+    (async () => {
+      await refreshDataFromRemote();
+    })();
+  }, []);
+
+  const filteredBooks = useMemo(() => {
+    let list = books;
+    if (onlyAvailable) list = list.filter((b) => b.status === "可借");
+    if (minRating > 0) list = list.filter((b) => Number(b.rating) >= minRating);
+    if (sortBy === "rating_desc") list = [...list].sort((a, b) => Number(b.rating) - Number(a.rating));
+    return list;
+  }, [books, onlyAvailable, minRating, sortBy]);
 
   const handleBorrow = (id: number, title: string) => {
     const ok = borrowBook(id);
@@ -63,13 +83,42 @@ const BookSearch = () => {
               <SelectItem value="文学">文学</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="icon">
-            <Filter className="h-4 w-4" />
-          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" aria-label="筛选">
+                <Filter className="h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="only-available">只看可借</Label>
+                  <Switch id="only-available" checked={onlyAvailable} onCheckedChange={(v) => setOnlyAvailable(!!v)} />
+                </div>
+                <div>
+                  <Label className="block mb-2">最低评分: {minRating.toFixed(1)}</Label>
+                  <Slider min={0} max={5} step={0.5} value={[minRating]} onValueChange={(v) => setMinRating(v[0] ?? 0)} />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label className="whitespace-nowrap">排序</Label>
+                  <Select value={sortBy} onValueChange={(v) => setSortBy(v as "none" | "rating_desc")}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue placeholder="选择排序" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">默认</SelectItem>
+                      <SelectItem value="rating_desc">评分降序</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-muted-foreground">更改会立即应用到列表</p>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="space-y-3">
-          {books.map((book) => (
+          {filteredBooks.map((book) => (
             <Card key={book.id} className="p-4">
               <div className="flex gap-4">
                 <div className="w-16 h-20 bg-primary/10 rounded flex items-center justify-center">

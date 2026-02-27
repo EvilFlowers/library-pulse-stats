@@ -2,7 +2,7 @@ import { Card } from "@/components/ui/card";
 import { CircularProgress } from "@/components/CircularProgress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useState } from "react";
-import { getBorrowedBooks, getCounters, getRatings } from "@/lib/localdb";
+import { getBorrowedBooks, getCounters, getRatings, refreshDataFromRemote } from "@/lib/localdb";
 import { useSearchParams } from "react-router-dom";
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from "recharts";
 import { BottomNav } from "@/components/BottomNav";
@@ -15,18 +15,22 @@ const Statistics = () => {
   const [todayBorrow, setTodayBorrow] = useState(0);
   const [monthlyData, setMonthlyData] = useState<Array<{ day: string; borrow: number }>>([]);
   useEffect(() => {
-    setTotalBorrowed(getBorrowedBooks().length);
-    const rs = getRatings();
-    setAvgRating(rs.length ? +(rs.reduce((a, b) => a + b.rating, 0) / rs.length).toFixed(1) : 0);
-    setTodayBorrow(getCounters().todayBorrowCount);
-    const days = Array.from({ length: 30 }, (_, i) => i + 1);
-    const base = 40;
-    const series = days.map((d) => {
-      const v = Math.max(0, Math.round(base + 10 * Math.sin(d / 4) + 8 * Math.cos(d / 5) + (d % 7)));
-      return { day: d.toString().padStart(2, "0"), borrow: v };
-    });
-    series[series.length - 1].borrow = Math.max(series[series.length - 1].borrow, todayBorrow);
-    setMonthlyData(series);
+    (async () => {
+      await refreshDataFromRemote();
+      setTotalBorrowed(getBorrowedBooks().length);
+      const rs = getRatings();
+      setAvgRating(rs.length ? +(rs.reduce((a, b) => a + b.rating, 0) / rs.length).toFixed(1) : 0);
+      const tb = getCounters().todayBorrowCount;
+      setTodayBorrow(tb);
+      const days = Array.from({ length: 30 }, (_, i) => i + 1);
+      const base = 40;
+      const series = days.map((d) => {
+        const v = Math.max(0, Math.round(base + 10 * Math.sin(d / 4) + 8 * Math.cos(d / 5) + (d % 7)));
+        return { day: d.toString().padStart(2, "0"), borrow: v };
+      });
+      series[series.length - 1].borrow = Math.max(series[series.length - 1].borrow, tb);
+      setMonthlyData(series);
+    })();
   }, []);
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -82,46 +86,6 @@ const Statistics = () => {
                 </ResponsiveContainer>
               </div>
             </Card>
-
-            <Card className="p-4">
-              <h3 className="font-semibold text-foreground mb-3">热门图书排行</h3>
-              <div className="space-y-3">
-                {[
-                  { rank: 1, title: "深度学习", count: 156 },
-                  { rank: 2, title: "算法导论", count: 142 },
-                  { rank: 3, title: "Python编程", count: 128 },
-                ].map((book) => (
-                  <div key={book.rank} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                        <span className="text-sm font-bold text-primary">{book.rank}</span>
-                      </div>
-                      <span className="text-sm text-foreground">{book.title}</span>
-                    </div>
-                    <span className="text-sm font-medium text-muted-foreground">
-                      {book.count} 次
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Card className="p-4">
-                <CircularProgress
-                  percentage={92}
-                  label="在线服务占比"
-                  size={120}
-                />
-              </Card>
-              <Card className="p-4">
-                <CircularProgress
-                  percentage={78}
-                  label="续借成功率"
-                  size={120}
-                />
-              </Card>
-            </div>
           </TabsContent>
 
           <TabsContent value="daily" className="space-y-4">
@@ -172,6 +136,44 @@ const Statistics = () => {
             </Card>
           </TabsContent>
         </Tabs>
+        <Card className="p-4">
+          <h3 className="font-semibold text-foreground mb-3">热门图书排行</h3>
+          <div className="space-y-3">
+            {[
+              { rank: 1, title: "深度学习", count: 156 },
+              { rank: 2, title: "算法导论", count: 142 },
+              { rank: 3, title: "Python编程", count: 128 },
+            ].map((book) => (
+              <div key={book.rank} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-bold text-primary">{book.rank}</span>
+                  </div>
+                  <span className="text-sm text-foreground">{book.title}</span>
+                </div>
+                <span className="text-sm font-medium text-muted-foreground">
+                  {book.count} 次
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <div className="grid grid-cols-2 gap-3">
+          <Card className="p-4">
+            <CircularProgress
+              percentage={92}
+              label="在线服务占比"
+              size={120}
+            />
+          </Card>
+          <Card className="p-4">
+            <CircularProgress
+              percentage={78}
+              label="续借成功率"
+              size={120}
+            />
+          </Card>
+        </div>
       </div>
       <BottomNav />
     </div>

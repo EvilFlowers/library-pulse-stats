@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { getBorrowedBooks, getRatings, submitRating } from "@/lib/localdb";
+import { getBorrowedBooks, getRatings, submitRating, refreshDataFromRemote } from "@/lib/localdb";
 import { useSearchParams } from "react-router-dom";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -19,7 +19,7 @@ const BookRating = () => {
   const [params] = useSearchParams();
   const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
 
-  const refresh = () => {
+  const refreshLocal = () => {
     const borrowed = getBorrowedBooks();
     const ratings = getRatings();
     const list = borrowed.map(b => {
@@ -30,7 +30,10 @@ const BookRating = () => {
   };
 
   useEffect(() => {
-    refresh();
+    (async () => {
+      await refreshDataFromRemote();
+      refreshLocal();
+    })();
   }, []);
 
   const handleSubmit = () => {
@@ -46,7 +49,7 @@ const BookRating = () => {
     if (selectedBook) {
       submitRating(selectedBook, rating, review || undefined);
       toast({ title: "评价成功", description: "感谢您的评价！" });
-      refresh();
+      refreshLocal();
     }
     setSelectedBook(null);
     setRating(0);

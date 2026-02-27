@@ -1,18 +1,22 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams, useLocation } from "react-router-dom";
 import { LibraryHeader } from "@/components/LibraryHeader";
-import { ServiceTabs } from "@/components/ServiceTabs";
 import { StatCard } from "@/components/StatCard";
 import { CircularProgress } from "@/components/CircularProgress";
 import { Card } from "@/components/ui/card";
 import { BookOpen, Home, BarChart3, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getCounters, getPurchaseRequests, getBorrowedBooks } from "@/lib/localdb";
+import { getCounters, getPurchaseRequests, getBorrowedBooks, refreshDataFromRemote } from "@/lib/localdb";
 
 const Index = () => {
   const [params] = useSearchParams();
+  const location = useLocation();
+
   const role = params.get("role") === "admin" || params.get("role") === "teacher" || params.get("role") === "student" ? params.get("role")! : "student";
   const token = params.get("token");
   const q = `?role=${role}${token ? `&token=${token}` : ""}`;
+  const isActive = (target: string) => (target === "/" ? location.pathname === "/" : location.pathname.startsWith(target));
+  const linkClass = (target: string) =>
+    `flex flex-col items-center gap-1 ${isActive(target) ? "text-primary" : "text-muted-foreground hover:text-foreground"}`;
   const [todaySearch, setTodaySearch] = useState(0);
   const [totalSearch, setTotalSearch] = useState(0);
   const [todayBorrow, setTodayBorrow] = useState(0);
@@ -22,19 +26,22 @@ const Index = () => {
   const [borrowedCount, setBorrowedCount] = useState(0);
 
   useEffect(() => {
-    const c = getCounters();
-    setTodaySearch(c.todaySearchCount);
-    setTotalSearch(c.totalSearchCount);
-    setTodayBorrow(c.todayBorrowCount);
-    setTodayReturn(c.todayReturnCount);
-    setTodayRenewal(c.todayRenewalCount);
-    setPurchaseCount(getPurchaseRequests().length);
-    setBorrowedCount(getBorrowedBooks().length);
+    (async () => {
+      await refreshDataFromRemote();
+      const c = getCounters();
+      setTodaySearch(c.todaySearchCount);
+      setTotalSearch(c.totalSearchCount);
+      setTodayBorrow(c.todayBorrowCount);
+      setTodayReturn(c.todayReturnCount);
+      setTodayRenewal(c.todayRenewalCount);
+      setPurchaseCount(getPurchaseRequests().length);
+      setBorrowedCount(getBorrowedBooks().length);
+    })();
   }, []);
+
   return (
     <div className="min-h-screen bg-background">
       <LibraryHeader />
-      <ServiceTabs />
 
       <main className="px-4 py-6 space-y-6 pb-20">
         {/* Key Metrics Section */}
@@ -107,19 +114,19 @@ const Index = () => {
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-card border-t border-border">
         <div className="flex justify-around items-center h-16">
-          <Link to={`/${q}`} className="flex flex-col items-center gap-1 text-primary">
+          <Link to={`/${q}`} className={linkClass("/")}>
             <Home className="h-5 w-5" />
             <span className="text-xs">首页</span>
           </Link>
-          <Link to={`/search${q}`} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground">
+          <Link to={`/search${q}`} className={linkClass("/search")}>
             <BookOpen className="h-5 w-5" />
             <span className="text-xs">图书</span>
           </Link>
-          <Link to={`/statistics${q}`} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground">
+          <Link to={`/statistics${q}`} className={linkClass("/statistics")}>
             <BarChart3 className="h-5 w-5" />
             <span className="text-xs">统计</span>
           </Link>
-          <Link to={`/borrow${q}`} className="flex flex-col items-center gap-1 text-muted-foreground hover:text-foreground">
+          <Link to={`/borrow${q}`} className={linkClass("/borrow")}>
             <User className="h-5 w-5" />
             <span className="text-xs">我的</span>
           </Link>
